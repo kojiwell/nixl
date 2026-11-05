@@ -1925,7 +1925,11 @@ xferBenchUtils::createFile(size_t buffer_size, const std::string &filename) {
         close(fd);
         return -1;
     }
-    memset(buf, XFERBENCH_TARGET_BUFFER_ELEMENT, buffer_size);
+    if (!xferBenchConfig::check_consistency && xferBenchRandomFill()) {
+        xferBenchFillRandom(buf, buffer_size, (uint64_t)buffer_size * 2654435761ULL + (uint64_t)fd);
+    } else {
+        memset(buf, XFERBENCH_TARGET_BUFFER_ELEMENT, buffer_size);
+    }
     int rc = pwrite(fd, buf, buffer_size, 0);
     if (rc < 0) {
         std::cerr << "Failed to write to file: " << fd << " with error: " << strerror(errno)

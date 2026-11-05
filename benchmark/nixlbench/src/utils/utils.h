@@ -81,6 +81,30 @@
 #define XFERBENCH_INITIATOR_BUFFER_ELEMENT 0xbb
 #define XFERBENCH_TARGET_BUFFER_ELEMENT 0xaa
 
+// XFERBENCH_RANDOM_FILL=1 fills DRAM buffers / upload files with pseudo-random bytes instead of
+// zeros/constant patterns, so storage clients that elide constant or zero blocks (e.g. the RED client)
+// cannot skip the data transfer. Ignored when --check_consistency is used (it needs the fixed patterns).
+#include <cstdlib>
+#include <cstdint>
+#include <cstring>
+inline bool xferBenchRandomFill() {
+    const char *e = std::getenv("XFERBENCH_RANDOM_FILL");
+    return e && *e && std::strcmp(e, "0") != 0;
+}
+inline void xferBenchFillRandom(void *addr, size_t len, uint64_t seed) {
+    uint64_t x = seed ^ 0x9e3779b97f4a7c15ULL;  // splitmix64 stream
+    uint8_t *p = static_cast<uint8_t *>(addr);
+    size_t i = 0;
+    for (; i + 8 <= len; i += 8) {
+        uint64_t z = (x += 0x9e3779b97f4a7c15ULL);
+        z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
+        z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+        z ^= z >> 31;
+        std::memcpy(p + i, &z, 8);
+    }
+    for (; i < len; i++) p[i] = static_cast<uint8_t>(x >> (8 * (i & 7)));
+}
+
 // CUDA warp size, to derive Device API group number from block_threads
 #define XFERBENCH_DEVICE_WARP_SIZE 32
 

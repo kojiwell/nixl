@@ -1294,6 +1294,11 @@ xferBenchNixlWorker::allocateMemory(int num_threads) {
          * is only needed when validating data. It was moved from the initBasicDescDram function to
          * here to avoid memsetting the memory again.
          */
+        if (seg_type == DRAM_SEG && !xferBenchConfig::check_consistency && xferBenchRandomFill()) {
+            for (auto &iov : local_regs_.back().iovs()) {
+                xferBenchFillRandom((void *)iov.addr, iov.len, (uint64_t)iov.addr);
+            }
+        }
         if (seg_type == DRAM_SEG && xferBenchConfig::check_consistency) {
             for (auto &iov : local_regs_.back().iovs()) {
                 if (isInitiator()) {
