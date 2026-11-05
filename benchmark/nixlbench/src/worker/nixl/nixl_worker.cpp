@@ -1312,6 +1312,31 @@ xferBenchNixlWorker::allocateMemory(int num_threads) {
         iov_lists.push_back(std::move(iov_list));
     }
 
+    // INFINIA READ: unlike OBJ (aws CLI put) there is no external tool to pre-create the
+    // objects that a READ run reads, so every GET would fail with ENOENT. Pre-populate each
+    // thread's object with one full-size (max_block_size) WRITE through NIXL itself.
+    if (XFERBENCH_BACKEND_INFINIA == xferBenchConfig::backend &&
+        xferBenchConfig::op_type == XFERBENCH_OP_READ && isInitiator()) {
+        for (size_t list_idx = 0; list_idx < iov_lists.size() && list_idx < remote_regs_.size();
+             list_idx++) {
+            nixl_xfer_dlist_t ld(DRAM_SEG);
+            nixl_xfer_dlist_t rd(OBJ_SEG);
+            iovListToNixlXferDlist(iov_lists[list_idx], ld);
+            iovListToNixlXferDlist(remote_regs_[list_idx].iovs(), rd);
+            nixlXferReqH *req = nullptr;
+            CHECK_NIXL_ERROR(agent->createXferReq(NIXL_WRITE, ld, rd, "initiator", req, &opt_args),
+                             "INFINIA pre-populate: createXferReq failed");
+            nixl_status_t st = agent->postXferReq(req);
+            while (st == NIXL_IN_PROG) {
+                st = agent->getXferStatus(req);
+            }
+            CHECK_NIXL_ERROR(st, "INFINIA pre-populate: write failed");
+            agent->releaseXferReq(req);
+        }
+        std::cout << "INFINIA: pre-populated " << remote_regs_.size() << " object(s) of "
+                  << xferBenchConfig::max_block_size << " bytes for READ" << std::endl;
+    }
+
     if (xferBenchConfig::use_device_api && isTarget()) {
         completion_counter_iov = initCompletionCounterVram();
         if (!completion_counter_iov.has_value()) {
